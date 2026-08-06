@@ -128,7 +128,7 @@
       <div id="overlay" role="status" aria-live="polite">
         <div class="overlay-panel">
           <h2 id="ov-title">Draw a Perfect Circle</h2>
-          <p id="ov-sub">Start on the marker, follow the arrow, and come all the way back round in one stroke.</p>
+          <p id="ov-sub">Start anywhere, go either way, and come all the way back round in one stroke.</p>
           <button class="btn btn-primary btn-sm" id="ov-start">Ready</button>
         </div>
       </div>
@@ -148,16 +148,16 @@
     <section class="board-embed" id="board-embed" aria-label="Global leaderboard"></section>
 
     <p style="margin-top: 24px; font-size: 13px; color: var(--text-secondary); line-height: 1.7; max-width: 64ch;">
-      One stroke, all the way around the dot. The dashed spoke is where it has to
-      start and the arrow is which way it has to run, and both come out of the
-      seed, so no two strokes begin in the same place. Lift early, double back,
-      or wander inside the centre or off the edge and the stroke is void. Close
+      One stroke, all the way around the dot. Start wherever you like and run it
+      whichever way you like: the stroke sets its own frame, and the direction is
+      whichever way it first turns. Lift early, turn back on yourself, or wander
+      onto the centre dot or off the pad and the stroke is void. Close
       it and the run is measured: the sweep is resampled at a hundred and eighty
       equal angles, a best-fit circle is fitted to those radii, and the score is
       how little your stroke wandered off it, as a percentage. The fit forgives
       drawing around the wrong point, because being off centre is not being out
-      of round, so the whole penalty lands on the wobble. Nothing but the seed
-      and the stroke itself is submitted, and the accuracy on the
+      of round, so the whole penalty lands on the wobble. Nothing but the stroke
+      itself is submitted, and the accuracy on the
       <a href="/leaderboard/" style="text-decoration: underline;">global leaderboard</a>
       is the one the server computed, not the one this page did.
     </p>

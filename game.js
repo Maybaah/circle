@@ -1,8 +1,8 @@
 /* Draw a Perfect Circle for Maybaah's Arcade.
    One tape per run: a seed plus every point the pointer passed through, each
-   written as the milliseconds since the point before it. The seed decides where
-   the stroke has to start and which way it has to go, so the Worker rebuilds
-   the same marker, walks the same polyline and computes the accuracy itself. */
+   written as the milliseconds since the point before it. The stroke sets its own
+   frame, so the Worker reads the start and the direction off the tape, walks the
+   same polyline and computes the accuracy itself. */
 
 (() => {
   "use strict";
@@ -14,34 +14,15 @@
 
   const CIRCLE_SIZE = 1000;
   const CIRCLE_CX = 500, CIRCLE_CY = 500;
-  const CIRCLE_MIN_R = 70, CIRCLE_MAX_R = 470;
+  const CIRCLE_MIN_R = 25, CIRCLE_MAX_R = 495;
   const CIRCLE_SAMPLES = 180;
-  const CIRCLE_MIN_POINTS = 36;
+  const CIRCLE_MIN_POINTS = 24;
   const CIRCLE_MAX_POINTS = 4000;
-  const CIRCLE_MAX_STEP = 24;
-  const CIRCLE_BACK = 3;
-  const CIRCLE_START_TOL = 22;
-  const CIRCLE_MIN_MS = 400, CIRCLE_MAX_MS = 40000;
-  const CIRCLE_MAX_GAP = 400;
-
-  function circleMulberry32(a) {
-    return function () {
-      a |= 0; a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
-  /* The seed is the whole setup: which spoke the stroke starts on and which way
-     it runs. Both come off the generator in this order, so a page and the
-     referee draw the same marker from the same number. */
-  function circleStart(seed) {
-    const rnd = circleMulberry32(seed >>> 0);
-    const deg = Math.floor(rnd() * 360);
-    const dir = rnd() < 0.5 ? 1 : -1;
-    return { deg, dir };
-  }
+  const CIRCLE_MAX_STEP = 60;
+  const CIRCLE_BACK = 20;
+  const CIRCLE_DIR_LOCK = 5;
+  const CIRCLE_MIN_MS = 250, CIRCLE_MAX_MS = 120000;
+  const CIRCLE_MAX_GAP = 1500;
 
   /* Screen space: y grows downward, so a rising angle is clockwise and dir 1 is
      clockwise. */
@@ -60,6 +41,24 @@
   function circleRadius(x, y) {
     const dx = x - CIRCLE_CX, dy = y - CIRCLE_CY;
     return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /* The stroke names its own frame: it starts wherever the pointer went down and
+     runs whichever way it first turned, both read straight off the tape so the
+     page and the referee still measure the same run. The direction locks on the
+     first few degrees and never moves after, which is what lets the page track a
+     sweep live without knowing yet how it ends. */
+  function circleFrame(points) {
+    const deg = circleAngle(points[0].x, points[0].y);
+    let acc = 0;
+    let prev = deg;
+    for (let i = 1; i < points.length; i++) {
+      const here = circleAngle(points[i].x, points[i].y);
+      acc += circleDelta(prev, here);
+      prev = here;
+      if (Math.abs(acc) >= CIRCLE_DIR_LOCK) return { deg, dir: acc > 0 ? 1 : -1 };
+    }
+    return { deg, dir: 1 };
   }
 
   /* Every field is variable width, so each point is closed with a semicolon:
@@ -119,20 +118,17 @@
      rather than assuming it is what forgives drawing around the wrong point,
      because being off centre is not being out of round, and that leaves the
      whole penalty on the wobble, which is the thing anyone is testing. */
-  function circleReplay(seed, points) {
+  function circleReplay(points) {
     if (!Array.isArray(points) || points.length < CIRCLE_MIN_POINTS) {
       return { ok: false, reason: "that stroke has too few points to be a circle" };
     }
     if (points.length > CIRCLE_MAX_POINTS) return { ok: false, reason: "bad stroke log" };
 
-    const start = circleStart(seed);
+    const start = circleFrame(points);
     const first = points[0];
     if (first.dt !== 0) return { ok: false, reason: "bad stroke log" };
     if (first.x > CIRCLE_SIZE || first.y > CIRCLE_SIZE) {
       return { ok: false, reason: "the stroke left the field" };
-    }
-    if (Math.abs(circleDelta(start.deg, circleAngle(first.x, first.y))) > CIRCLE_START_TOL) {
-      return { ok: false, reason: "the stroke did not start on the marker" };
     }
 
     const n = points.length;
@@ -169,8 +165,10 @@
     if (timeMs < CIRCLE_MIN_MS) return { ok: false, reason: "that stroke was too fast to be drawn" };
     if (timeMs > CIRCLE_MAX_MS) return { ok: false, reason: "that stroke took too long" };
 
+    /* a stroke that lands exactly on 360 is a closed circle, and floating point
+       is the only reason it would read as 359.999999 here */
     const total = cum[n - 1];
-    if (total < 360) return { ok: false, reason: "the circle never closed" };
+    if (total < 360 - 1e-6) return { ok: false, reason: "the circle never closed" };
     if (total > 360 + CIRCLE_MAX_STEP) return { ok: false, reason: "the stroke ran past the close" };
 
     /* The samples are taken in the frame the sweep ran in rather than the
@@ -267,40 +265,13 @@
   }
 
   function paint() {
-    const ink = css("--text-muted") || "#71717a";
     const accent = css("--accent") || "#e4e4e7";
     const good = css("--success") || "#4ade80";
 
     ctx.clearRect(0, 0, CIRCLE_SIZE, CIRCLE_SIZE);
 
-    /* the marker is a spoke rather than a ring: it says where to start and
-       which way to go without handing anyone a circle to trace */
-    const rad = (S.start.deg * Math.PI) / 180;
-    ctx.save();
-    ctx.setLineDash([14, 12]);
-    ctx.strokeStyle = ink;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(CIRCLE_CX + Math.cos(rad) * CIRCLE_MIN_R, CIRCLE_CY + Math.sin(rad) * CIRCLE_MIN_R);
-    ctx.lineTo(CIRCLE_CX + Math.cos(rad) * CIRCLE_MAX_R, CIRCLE_CY + Math.sin(rad) * CIRCLE_MAX_R);
-    ctx.stroke();
-    ctx.restore();
-
-    /* the arrow sits on the spoke at mid radius, turned a quarter turn the way
-       the stroke has to run */
-    const mid = (CIRCLE_MIN_R + CIRCLE_MAX_R) / 2;
-    ctx.save();
-    ctx.translate(CIRCLE_CX + Math.cos(rad) * mid, CIRCLE_CY + Math.sin(rad) * mid);
-    ctx.rotate(rad + (S.start.dir > 0 ? Math.PI / 2 : -Math.PI / 2));
-    ctx.fillStyle = accent;
-    ctx.beginPath();
-    ctx.moveTo(0, -22);
-    ctx.lineTo(15, 12);
-    ctx.lineTo(-15, 12);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
+    /* nothing but the dot now: the stroke picks its own start and its own
+       direction, so there is no marker left to draw */
     ctx.fillStyle = accent;
     ctx.beginPath();
     ctx.arc(CIRCLE_CX, CIRCLE_CY, 7, 0, Math.PI * 2);
@@ -354,8 +325,9 @@
     }
     const fit = circleFit(xs, ys);
     if (!fit) return { r: 0, x: CIRCLE_CX, y: CIRCLE_CY };
-    const rot = (S.start.deg * Math.PI) / 180;
-    const d = S.start.dir;
+    const frame = circleFrame(S.points);
+    const rot = (frame.deg * Math.PI) / 180;
+    const d = frame.dir;
     return {
       r: fit.r,
       x: CIRCLE_CX + fit.x * Math.cos(rot) - d * fit.y * Math.sin(rot),
@@ -374,9 +346,10 @@
     const seed = Math.floor(Math.random() * 0x100000000) >>> 0;
     S = {
       seed,
-      start: circleStart(seed),
       points: [],
       cum: [],
+      dir: 0,
+      turn: 0,
       timeMs: 0,
       last: 0,
       lastAngle: 0,
@@ -388,8 +361,8 @@
     submitWrap.style.display = "none";
     runStatus.textContent = "";
     showOverlay("Draw a Perfect Circle",
-      "Start on the marker, follow the arrow, and come all the way back round " +
-      "in one stroke. Nothing is measured until you close it.",
+      "Start anywhere, go either way, and come all the way back round in one " +
+      "stroke. Nothing is measured until you close it.",
       "Ready");
     paint();
     syncHud();
@@ -420,6 +393,24 @@
     return { x, y };
   }
 
+  /* the points banked before the direction locked, walked again now that there
+     is one, so the sweep and its checks read the same as the replay's */
+  function rebuildSweep() {
+    S.cum = [0];
+    let prev = circleAngle(S.points[0].x, S.points[0].y);
+    for (let i = 1; i < S.points.length; i++) {
+      const here = circleAngle(S.points[i].x, S.points[i].y);
+      const step = circleDelta(prev, here) * S.dir;
+      prev = here;
+      if (step < -CIRCLE_BACK) {
+        abandon("The stroke doubled back. One sweep, one direction.");
+        return false;
+      }
+      S.cum.push(Math.max(S.cum[i - 1], S.cum[i - 1] + step));
+    }
+    return true;
+  }
+
   function onDown(e) {
     if (!S || S.result || S.dead) return;
     if (e.button !== undefined && e.button !== 0) return;
@@ -430,17 +421,15 @@
 
     const r = circleRadius(p.x, p.y);
     if (r < CIRCLE_MIN_R || r > CIRCLE_MAX_R) {
-      abandon("The stroke has to start inside the ring, between the centre dot and the edge.");
-      return;
-    }
-    if (Math.abs(circleDelta(S.start.deg, circleAngle(p.x, p.y))) > CIRCLE_START_TOL) {
-      abandon("The stroke has to start on the marker.");
+      abandon("The stroke has to start off the centre dot and on the pad.");
       return;
     }
 
     S.drawing = true;
     S.points = [{ dt: 0, x: p.x, y: p.y }];
     S.cum = [0];
+    S.dir = 0;
+    S.turn = 0;
     S.timeMs = 0;
     S.last = performance.now();
     S.lastAngle = circleAngle(p.x, p.y);
@@ -465,15 +454,15 @@
       return;
     }
     const here = circleAngle(p.x, p.y);
-    const step = circleDelta(S.lastAngle, here) * S.start.dir;
+    const turn = circleDelta(S.lastAngle, here);
     /* a point that moved nowhere carries no angle and no information, so it is
        dropped here rather than padding a tape the Worker has to walk */
-    if (step === 0 && p.x === S.points[S.points.length - 1].x && p.y === S.points[S.points.length - 1].y) return;
-    if (step > CIRCLE_MAX_STEP) {
+    if (turn === 0 && p.x === S.points[S.points.length - 1].x && p.y === S.points[S.points.length - 1].y) return;
+    if (Math.abs(turn) > CIRCLE_MAX_STEP) {
       abandon("The pointer jumped too far around the centre in one step.");
       return;
     }
-    if (step < -CIRCLE_BACK) {
+    if (S.dir && turn * S.dir < -CIRCLE_BACK) {
       abandon("The stroke doubled back. One sweep, one direction.");
       return;
     }
@@ -484,11 +473,28 @@
     }
 
     S.points.push({ dt, x: p.x, y: p.y });
-    S.cum.push(Math.max(S.cum[S.cum.length - 1], S.cum[S.cum.length - 1] + step));
     S.timeMs += dt;
     S.last = now;
     S.lastAngle = here;
     S.lastR = r;
+
+    /* until the stroke has turned far enough to say which way it is going there
+       is no sweep to add to, so the run banks the turn and rebuilds the sweep
+       in one pass the moment the direction locks, exactly as the replay reads it
+       back off the tape */
+    if (!S.dir) {
+      S.turn += turn;
+      if (Math.abs(S.turn) >= CIRCLE_DIR_LOCK) {
+        S.dir = S.turn > 0 ? 1 : -1;
+        if (!rebuildSweep()) return;
+      } else {
+        S.cum.push(S.cum[S.cum.length - 1]);
+      }
+    } else {
+      const step = turn * S.dir;
+      const last = S.cum[S.cum.length - 1];
+      S.cum.push(Math.max(last, last + step));
+    }
 
     if (S.points.length > CIRCLE_MAX_POINTS) {
       abandon("That stroke has more points than a tape can carry.");
@@ -514,7 +520,7 @@
   function finish() {
     S.drawing = false;
     canvas.classList.remove("armed");
-    const run = circleReplay(S.seed, S.points);
+    const run = circleReplay(S.points);
     if (!run.ok) {
       abandon("This stroke did not verify locally: " + run.reason + ".");
       return;
@@ -590,6 +596,6 @@
     replay: circleReplay,
     encode: circleEncode,
     decode: circleDecode,
-    start: circleStart,
+    frame: circleFrame,
   };
 })();

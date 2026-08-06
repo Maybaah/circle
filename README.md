@@ -9,13 +9,13 @@ One stroke, all the way around a dot, scored on how round it really is. Part of
 
 - A run is one continuous stroke that sweeps a full 360 degrees around the
   centre dot of a fixed 1000x1000 pad.
-- The seed picks the **start marker** (a dashed spoke) and the **direction**
-  (the arrow). The stroke has to begin within 22 degrees of the marker and run
-  the way the arrow points.
+- The stroke starts **wherever the pointer goes down** and runs **whichever way
+  it first turns**. Nothing is prescribed: the direction locks on the first 5
+  degrees of turn and holds for the rest of the run.
 - The stroke is void if it lifts before the circle closes, doubles back by more
-  than 3 degrees, jumps more than 24 degrees around the centre in one sample,
-  stalls for more than 400ms, or leaves the ring between radius 70 and 470.
-- A stroke needs at least 36 samples and 400ms. Somewhere around half a second
+  than 20 degrees, jumps more than 60 degrees around the centre in one sample,
+  stalls for more than 1500ms, or leaves the ring between radius 25 and 495.
+- A stroke needs at least 24 samples and 250ms. Somewhere around half a second
   is the floor in practice, because a pointer only reports so often, and a
   circle drawn faster than that is not a tape anyone can measure.
 - Ranked by accuracy, highest wins.
@@ -45,17 +45,19 @@ integer coordinates and a rounded pixel is a real wobble.
 
 ## How a run is verified
 
-Nothing is submitted but evidence: the seed and a tape of every point the
-pointer passed through, each written as `<ms since the last point>,<x>,<y>;`.
-The marker and the direction come out of the seed alone, so
-`arcade-leaderboard` rebuilds them, walks the same polyline, applies the same
-bounds and computes the accuracy itself. A tape that starts off the marker,
-never closes, runs past the close, backtracks, stalls or leaves the ring is
-rejected with a 422.
+Nothing is submitted but evidence: the seed the run was opened with and a tape
+of every point the pointer passed through, each written as
+`<ms since the last point>,<x>,<y>;`. The start and the direction come off the
+tape rather than the seed, so `arcade-leaderboard` reads the same frame out of
+the same points, walks the same polyline, applies the same bounds and computes
+the accuracy itself. A tape that never closes, runs past the close, backtracks,
+stalls or leaves the ring is rejected with a 422.
 
 What a replay cannot check is the clock and the hand behind it: the gaps on the
 tape are the browser's own timestamps, and a synthesised stroke is a synthesised
-stroke. The floor and ceiling on the gaps, the sample count, the maximum step
+stroke. A free start costs the one thing the marker bought, too, which is that a
+tape no longer belongs to the run it was drawn in: the same points verify under
+any seed. The floor and ceiling on the gaps, the sample count, the maximum step
 and the total time are the whole defence there, and the score itself is still
 computed by the Worker rather than accepted from the page.
 
