@@ -76,15 +76,17 @@
     .stage { position: relative; margin-top: 16px; }
 
     /* The pad is one fixed 1000x1000 space the page only scales, so a point
-       lands on the same integer coordinate whatever the screen is. */
+       lands on the same integer coordinate whatever the screen is. Nothing on
+       it is round: a circular pad, or a radial gradient with a visible edge to
+       it, is a template, and a slow hand tracing that edge is not drawing a
+       circle. The corners it opens up are outside the ring anyway. */
     #pad {
       display: block;
       width: 100%;
       aspect-ratio: 1;
-      background:
-        radial-gradient(circle at 50% 50%, var(--bg-elevated) 0, var(--bg-surface) 70%);
+      background: var(--bg-surface);
       border: 1px solid var(--border);
-      border-radius: 50%;
+      border-radius: var(--radius-lg);
       cursor: crosshair;
       touch-action: none;
       user-select: none; -webkit-user-select: none;
@@ -151,7 +153,7 @@
       One stroke, all the way around the dot. Start wherever you like and run it
       whichever way you like: the stroke sets its own frame, and the direction is
       whichever way it first turns. Lift early, turn back on yourself, or wander
-      onto the centre dot or off the pad and the stroke is void. Close
+      onto the centre dot or too far out of the ring and the stroke is void. Close
       it and the run is measured: the sweep is resampled at a hundred and eighty
       equal angles, a best-fit circle is fitted to those radii, and the score is
       how little your stroke wandered off it, as a percentage. The fit forgives

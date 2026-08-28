@@ -420,8 +420,12 @@
     e.preventDefault();
 
     const r = circleRadius(p.x, p.y);
-    if (r < CIRCLE_MIN_R || r > CIRCLE_MAX_R) {
-      abandon("The stroke has to start off the centre dot and on the pad.");
+    /* the corners of the pad sit outside the ring and were unreachable while it
+       was drawn as a circle, so a press out there is not a stroke at all and is
+       ignored rather than voiding a run nobody started */
+    if (r > CIRCLE_MAX_R) return;
+    if (r < CIRCLE_MIN_R) {
+      abandon("The stroke has to start off the centre dot.");
       return;
     }
 
